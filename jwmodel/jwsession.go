@@ -29,7 +29,7 @@ func (session *JwSession) getNewJSessionID()  {
 		req.SetRequestURI(JwHost)
 		req.Header.SetMethod(http.MethodGet)
 		resp.SkipBody = true
-		if err := fasthttp.DoTimeout(req, resp, util.DefaultTimeout); err != nil {
+		if err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout); err != nil {
 			util.Log("刷新会话ID失败", err.Error())
 		}else {
 			session.JSESSIONID = extractSession(resp.Header.PeekCookie("JSESSIONID"))
@@ -58,7 +58,7 @@ func (session *JwSession) Validate() bool {
 		args.Add("hidOption", "getOnlineMessage")
 		args.WriteTo(req.BodyWriter())
 
-		if err := fasthttp.DoTimeout(req, resp, util.DefaultTimeout); err != nil {
+		if err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout); err != nil {
 			util.Log("会话有效性验证失败", err.Error())
 		}else {
 			// 通过判断body是否为空验证有效性
@@ -123,7 +123,7 @@ func (session *JwSession) Login(userCode, passWord string) bool  {
 			req.Header.SetReferer(JwHost)
 			args.WriteTo(req.BodyWriter())
 
-			err := fasthttp.DoTimeout(req, resp, util.DefaultTimeout)
+			err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout)
 			if err != nil {
 				util.Log("请求登录失败", err.Error())
 			}else {
@@ -153,7 +153,7 @@ func (session *JwSession) getCaptcha() *string {
 		req.SetRequestURI(Captcha)
 		req.Header.SetCookie("JSESSIONID", session.JSESSIONID)
 
-		err := fasthttp.DoTimeout(req, resp, util.DefaultTimeout)
+		err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout)
 		if err != nil {
 			util.Log("获取验证码图片失败", err.Error())
 			return
@@ -212,7 +212,7 @@ func recognizeCaptcha(captchaPath string) *CaptchaBody {
 		req.SetBody(bodyBuffer.Bytes())
 		req.Header.SetMethod(fasthttp.MethodPost)
 		req.SetRequestURI(RecognizeURL)
-		err := fasthttp.DoTimeout(req, resp, util.DefaultTimeout)
+		err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout)
 
 		if err != nil {
 			util.Log("识别验证码失败", err.Error())
@@ -223,6 +223,16 @@ func recognizeCaptcha(captchaPath string) *CaptchaBody {
 	})
 
 	return &captchaBody
+}
+
+
+// 添加教务会话cookie，
+func (session *JwSession) Do(f func(req *fasthttp.Request, resp *fasthttp.Response))  {
+	util.SimpleDo(func(req *fasthttp.Request, resp *fasthttp.Response) {
+		req.Header.SetReferer(JwHost)
+		req.Header.SetCookie("JSESSIONID", session.JSESSIONID)
+		f(req, resp)
+	})
 }
 
 

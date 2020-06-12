@@ -11,7 +11,7 @@ var firstLog = false
 // 打印日志
 func Log(msg ...string) {
 	if firstLog {
-		log.SetFlags(log.Ldate|log.Ltime|log.Lshortfile)
+		log.SetFlags(log.Ldate|log.Ltime|log.Llongfile)
 		firstLog = false
 	}
 	log.Println(strings.Join(msg, " "))

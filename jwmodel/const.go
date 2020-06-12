@@ -12,7 +12,7 @@ const (
 	// 检查会话有效性
 	OnlineMessage = JwHost + "/online/message"
 	// 获取所有学科的专业的列表
-	SpecialityList = JwHost + "/frame/droplist/getDropLists.action"
+	SpecialtyList = JwHost + "/frame/droplist/getDropLists.action"
 	// 获取指定年级的专业信息
 	GradeSpeciality = JwHost + "/jw/common/getStuGradeSpeciatyInfo.action"
 	// 获取二维形式的课表

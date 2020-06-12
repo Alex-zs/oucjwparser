@@ -5,9 +5,10 @@ import (
 	"time"
 )
 
-const DefaultTimeout = 10 * time.Second
+// 默认http超时时间
+const DefaultHttpTimeout = 10 * time.Second
 
-// 请求复用
+// 简单的请求复用
 func SimpleDo(f func(req *fasthttp.Request, resp *fasthttp.Response))  {
 	// 请求、响应对象复用
 	req := fasthttp.AcquireRequest()
