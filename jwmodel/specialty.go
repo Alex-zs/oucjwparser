@@ -15,18 +15,22 @@ type Specialty struct {
 }
 
 // 获取指定年份的专业列表
-func GetSpecialties(year int) *[]Specialty{
+func GetSpecialties(year int) ([]Specialty, error){
 	var specialties [] Specialty = nil
+	var specialtyError error = nil
 	util.SimpleDo(func(req *fasthttp.Request, resp *fasthttp.Response) {
 		// 添加请求参数
-		args := &fasthttp.Args{}
+		args := fasthttp.AcquireArgs()
+		defer fasthttp.ReleaseArgs(args)
 		args.Add("comboBoxName", "MsGrade_Specialty")
 		args.Add("paramValue", "nj=" + strconv.Itoa(year))
 		args.WriteTo(req.BodyWriter())
 		req.Header.SetMethod(fasthttp.MethodPost)
 		req.SetRequestURI(SpecialtyList)
-		fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout)
-
+		if err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout); err != nil {
+			specialtyError = err
+			return
+		}
 		// 获取专业列表大小
 		size := int(gjson.GetBytes(resp.Body(), "#").Num)
 		specialties = make([]Specialty, size)
@@ -44,5 +48,5 @@ func GetSpecialties(year int) *[]Specialty{
 			return true
 		})
 	})
-	return &specialties
+	return specialties, specialtyError
 }

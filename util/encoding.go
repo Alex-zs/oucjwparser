@@ -9,12 +9,12 @@ import (
 )
 
 // GBK编码字节数组转换为UTF8编码字符串
-func GBKBytes2UTF8(src []byte) string {
+func GBKBytes2UTF8(src []byte) []byte {
 	data, err := ioutil.ReadAll(transform.NewReader(bytes.NewReader(src), simplifiedchinese.GBK.NewDecoder()))
 	if err != nil {
-		return ""
+		return make([]byte, 0)
 	}
-	return string(data)
+	return data
 }
 
 // base64编码

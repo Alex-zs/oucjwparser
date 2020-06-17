@@ -18,23 +18,26 @@ import (
 
 // 教务会话
 type JwSession struct {
-	UserCode   string `json:"userCode"`			// 学号
+	UserCode   string `json:"UserCode"`			// 学号
 	PassWord   string `json:"password"`			// 密码
 	JSESSIONID string `json:"j_session_id"`		// 教务会话ID
 }
 
 // 获取新的会话ID
-func (session *JwSession) getNewJSessionID()  {
+func (session *JwSession) getNewJSessionID() error {
+	var sessionError error = nil
 	util.SimpleDo(func(req *fasthttp.Request, resp *fasthttp.Response) {
 		req.SetRequestURI(JwHost)
 		req.Header.SetMethod(http.MethodGet)
 		resp.SkipBody = true
 		if err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout); err != nil {
-			util.Log("刷新会话ID失败", err.Error())
+			util.Log("刷新会话ID失败")
+			sessionError = err
 		}else {
 			session.JSESSIONID = extractSession(resp.Header.PeekCookie("JSESSIONID"))
 		}
 	})
+	return sessionError
 }
 
 // 从cookie中提取session value
@@ -54,7 +57,8 @@ func (session *JwSession) Validate() bool {
 		req.Header.SetCookie("JSESSIONID", session.JSESSIONID)
 
 		// 写入参数
-		args := &fasthttp.Args{}
+		args := fasthttp.AcquireArgs()
+		defer fasthttp.ReleaseArgs(args)
 		args.Add("hidOption", "getOnlineMessage")
 		args.WriteTo(req.BodyWriter())
 
@@ -69,19 +73,17 @@ func (session *JwSession) Validate() bool {
 	return valid
 }
 
-var LoginSuccess = 0
-var LoginFailure = 0
-
 // 登录教务系统
-func (session *JwSession) Login(userCode, passWord string) bool  {
+func (session *JwSession) Login(userCode, passWord string) (bool, error)  {
 	session.PassWord = passWord
 	session.UserCode = userCode
 	// 登录成功的标识
 	loginSuccess := false
 
 	// 获取新的会话ID
-	session.getNewJSessionID()
-
+	if err := session.getNewJSessionID(); err != nil {
+		return false, err
+	}
 	usercode := util.Base64Encoding([]byte(userCode + ";;" + session.JSESSIONID))
 	result := 0
 	for i := 0; i < len(passWord); i++ {
@@ -102,13 +104,22 @@ func (session *JwSession) Login(userCode, passWord string) bool  {
 	// 尝试识别验证码，最多尝试三次
 	for tryTimes := 0; tryTimes < 3; tryTimes++ {
 		// 获取验证码图片
-		captchaPath := session.getCaptcha()
+		captchaPath, err := session.getCaptcha()
+		if err != nil {
+			return false, err
+		}
 		// 识别验证码
-		captcha := recognizeCaptcha(*captchaPath).Value
+		captchaBody, err := recognizeCaptcha(captchaPath)
+		if err != nil {
+			return false, err
+		}
+		captcha := captchaBody.Value
 		password := util.MD5(util.MD5(passWord) + util.MD5(strings.ToLower(captcha)))
-		data := ""
+
+		var loginError error = nil
 		util.SimpleDo(func(req *fasthttp.Request, resp *fasthttp.Response) {
-			args := &fasthttp.Args{}
+			args := fasthttp.AcquireArgs()
+			defer fasthttp.ReleaseArgs(args)
 			args.Add("_u" + captcha, usercode)
 			args.Add("_p" + captcha, password)
 			args.Add("randnumber", captcha)
@@ -125,29 +136,31 @@ func (session *JwSession) Login(userCode, passWord string) bool  {
 
 			err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout)
 			if err != nil {
-				util.Log("请求登录失败", err.Error())
+				util.Log("请求登录失败")
+				loginError = err
 			}else {
-				data = string(resp.Body())
+				data := string(resp.Body())
 				if strings.Index(data, "操作成功") > 0 {
 					loginSuccess = true
-					LoginSuccess += 1
-				}else {
-					LoginFailure += 1
 				}
 			}
 
-			defer os.Remove(*captchaPath)
+			os.Remove(captchaPath)
 		})
+		if loginError != nil{
+			return false, loginError
+		}
 		if loginSuccess {
 			break
 		}
 	}
-	return loginSuccess
+	return loginSuccess, nil
 }
 
 // 尝试获取验证码图片
 // 返回图片的本地路径,获取失败返回空字符串
-func (session *JwSession) getCaptcha() *string {
+func (session *JwSession) getCaptcha() (string, error) {
+	var captchaError error = nil
 	captchaPath := ""
 	util.SimpleDo(func(req *fasthttp.Request, resp *fasthttp.Response) {
 		req.SetRequestURI(Captcha)
@@ -155,24 +168,27 @@ func (session *JwSession) getCaptcha() *string {
 
 		err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout)
 		if err != nil {
-			util.Log("获取验证码图片失败", err.Error())
+			util.Log("获取验证码图片失败")
+			captchaError = err
 			return
 		}
 
 		// 创建临时文件存放验证码图片
 		captchaImg, err := ioutil.TempFile("", "*.jpeg")
 		if err != nil {
-			util.Log("创建图片验证码失败", err.Error())
+			util.Log("创建图片验证码失败")
+			captchaError = err
 			return
 		}
 		_, err = captchaImg.Write(resp.Body())
 		if err != nil {
-			util.Log("数据写入验证码图片失败", err.Error())
+			util.Log("数据写入验证码图片失败")
+			captchaError = err
 		}else {
 			captchaPath = captchaImg.Name()
 		}
 	})
-	return &captchaPath
+	return captchaPath, captchaError
 }
 
 // 识别验证码的接口
@@ -186,7 +202,9 @@ type CaptchaBody struct {
 }
 
 // 开始识别验证码
-func recognizeCaptcha(captchaPath string) *CaptchaBody {
+func recognizeCaptcha(captchaPath string) (*CaptchaBody, error) {
+	var recognizeError error = nil
+
 	captchaBody := CaptchaBody{}
 
 	// 新建缓冲区，用于存放图片
@@ -196,14 +214,13 @@ func recognizeCaptcha(captchaPath string) *CaptchaBody {
 	// 写入表单
 	fileWriter, err := bodyWriter.CreateFormFile("image", path.Base(captchaPath))
 	if err != nil {
-		util.Log(err.Error())
-		return &captchaBody
+		return nil, err
 	}
 	file, _ := os.Open(captchaPath)
 	defer file.Close()
 	_, err = io.Copy(fileWriter, file)
 	if err != nil {
-		util.Log(err.Error())
+		return nil, err
 	}
 	bodyWriter.Close()
 
@@ -215,14 +232,17 @@ func recognizeCaptcha(captchaPath string) *CaptchaBody {
 		err := fasthttp.DoTimeout(req, resp, util.DefaultHttpTimeout)
 
 		if err != nil {
-			util.Log("识别验证码失败", err.Error())
+			util.Log("请求识别验证码验证码失败")
+			recognizeError = err
 			return
 		}
 
-		json.Unmarshal(resp.Body(), &captchaBody)
+		if err := json.Unmarshal(resp.Body(), &captchaBody); err != nil {
+			recognizeError = err
+		}
 	})
 
-	return &captchaBody
+	return &captchaBody, recognizeError
 }
 
 
@@ -235,4 +255,7 @@ func (session *JwSession) Do(f func(req *fasthttp.Request, resp *fasthttp.Respon
 	})
 }
 
-
+// 创建新会话
+func NewSession() *JwSession {
+	return new(JwSession)
+}
