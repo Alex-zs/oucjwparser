@@ -114,7 +114,7 @@ func (session *JwSession) Login(userCode, passWord string) (bool, error)  {
 			return false, err
 		}
 		captcha := captchaBody.Value
-		password := util.MD5(util.MD5(passWord) + util.MD5(strings.ToLower(captcha)))
+		password := util.TripleMD5(passWord, strings.ToLower(captcha))
 
 		var loginError error = nil
 		util.SimpleDo(func(req *fasthttp.Request, resp *fasthttp.Response) {
@@ -197,7 +197,7 @@ const RecognizeURL = "https://itstudio.club/ocr/jw"
 // 识别接口返回的body
 type CaptchaBody struct {
 	SpendTime int `json:"spend_time(ms)"`	// 识别耗费的时间 毫秒
-	TimeStamp string `json:"time"`			// 时间戳
+	TimeStamp string `json:"Time"`			// 时间戳
 	Value string `json:"value"`				// 识别值
 }
 

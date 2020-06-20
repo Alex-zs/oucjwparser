@@ -12,3 +12,7 @@ func MD5(data string) string {
 	res := hasher.Sum([]byte{})
 	return fmt.Sprintf("%x", res)
 }
+
+func TripleMD5(str1, str2 string) string  {
+	return MD5(MD5(str1) + MD5(str2))
+}

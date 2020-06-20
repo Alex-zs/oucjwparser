@@ -45,7 +45,7 @@ func (session *JwSession) GetStuCourse(year, semester int) ([]StuCourse, error) 
 			util.Log("获取选课记录失败")
 			stuCourseError = err
 		}
-		data := util.GBKBytes2UTF8(resp.Body())
+		data := util.GBK2UTF8(resp.Body())
 		doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(data))
 		doc.Find(".O,.E").Each(func(i int, selection *goquery.Selection) {
 			course := StuCourse{}
@@ -109,7 +109,7 @@ func (session *JwSession) GetHtmlStuCourse(year, semester int) (string, error){
 			htmlStuCourseError = err
 			return
 		}
-		htmlStuCourse = string(util.GBKBytes2UTF8(resp.Body()))
+		htmlStuCourse = string(util.GBK2UTF8(resp.Body()))
 	})
 
 	return htmlStuCourse, htmlStuCourseError
